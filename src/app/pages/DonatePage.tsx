@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { getCurrentUser } from '../utils/auth';
 import { FoodType } from '../types';
 import { donationsAPI } from '../services/api';
+import { AddressAutocomplete } from '../components/AddressAutocomplete';
 
 export function DonatePage() {
   const navigate = useNavigate();
@@ -24,13 +25,36 @@ export function DonatePage() {
     pickupTimeStart: '',
     pickupTimeEnd: '',
     expiryDate: '',
-    address: user?.location.address || ''
+    address: '',
+    lat: 0,
+    lng: 0,
   });
+  const [addressVerified, setAddressVerified] = useState(false);
+
+  const handleAddressSelect = (address: string, lat: number, lng: number) => {
+    setFormData((prev) => ({ ...prev, address, lat, lng }));
+    setAddressVerified(lat !== 0 && lng !== 0);
+  };
+
+  const handleAddressChange = (address: string) => {
+    setFormData((prev) => ({ ...prev, address, lat: 0, lng: 0 }));
+    setAddressVerified(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
 
+    if (!addressVerified || formData.lat === 0) {
+      toast.error('Please select a verified pickup address from the suggestions.');
+      return;
+    }
+
+    if (!formData.foodType) {
+      toast.error('Please select a food type.');
+      return;
+    }
+
+    setIsLoading(true);
     try {
       await donationsAPI.create({
         title: formData.title,
@@ -42,9 +66,11 @@ export function DonatePage() {
         pickupTimeEnd: new Date(formData.pickupTimeEnd).toISOString(),
         expiryDate: new Date(formData.expiryDate).toISOString(),
         address: formData.address,
+        lat: formData.lat,
+        lng: formData.lng,
       });
 
-      toast.success('Food donation posted successfully!');
+      toast.success('Food donation posted successfully! It is now visible on the map.');
       navigate('/');
     } catch (err: any) {
       toast.error(err.message || 'Failed to post donation. Please try again.');
@@ -59,7 +85,7 @@ export function DonatePage() {
     { value: 'packaged', label: 'Packaged Food (canned, sealed)' },
     { value: 'produce', label: 'Fresh Produce (fruits, vegetables)' },
     { value: 'bakery', label: 'Bakery Items (bread, pastries)' },
-    { value: 'dairy', label: 'Dairy Products (milk, cheese)' }
+    { value: 'dairy', label: 'Dairy Products (milk, cheese)' },
   ];
 
   return (
@@ -73,6 +99,7 @@ export function DonatePage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
+
             {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="title">Donation Title *</Label>
@@ -100,8 +127,11 @@ export function DonatePage() {
 
             {/* Food Type */}
             <div className="space-y-2">
-              <Label htmlFor="foodType">Food Type *</Label>
-              <Select value={formData.foodType} onValueChange={(value) => setFormData({ ...formData, foodType: value as FoodType })}>
+              <Label>Food Type *</Label>
+              <Select
+                value={formData.foodType}
+                onValueChange={(value) => setFormData({ ...formData, foodType: value as FoodType })}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select food type" />
                 </SelectTrigger>
@@ -123,6 +153,7 @@ export function DonatePage() {
                   id="quantity"
                   type="number"
                   step="0.1"
+                  min="0.1"
                   placeholder="10"
                   value={formData.quantity}
                   onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
@@ -130,8 +161,11 @@ export function DonatePage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="unit">Unit *</Label>
-                <Select value={formData.unit} onValueChange={(value) => setFormData({ ...formData, unit: value })}>
+                <Label>Unit *</Label>
+                <Select
+                  value={formData.unit}
+                  onValueChange={(value) => setFormData({ ...formData, unit: value })}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -182,19 +216,21 @@ export function DonatePage() {
               />
             </div>
 
-            {/* Pickup Address */}
+            {/* Pickup Address — Nominatim autocomplete */}
             <div className="space-y-2">
-              <Label htmlFor="address">Pickup Address *</Label>
-              <Input
-                id="address"
-                placeholder="123 Main St, City, State"
+              <Label>Pickup Address * <span className="text-xs text-gray-500 font-normal">(must be selected from suggestions)</span></Label>
+              <AddressAutocomplete
                 value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                onSelect={handleAddressSelect}
+                onChange={handleAddressChange}
+                placeholder="Search your address in Bengaluru, Karnataka..."
                 required
               />
-              <p className="text-xs text-gray-500">
-                This is where recipients or volunteers will pick up the food
-              </p>
+              {formData.lat !== 0 && (
+                <p className="text-xs text-gray-400">
+                  📍 Coordinates: {formData.lat.toFixed(5)}, {formData.lng.toFixed(5)}
+                </p>
+              )}
             </div>
 
             {/* Food Safety Note */}
@@ -209,7 +245,7 @@ export function DonatePage() {
               </ul>
             </div>
 
-            {/* Submit Button */}
+            {/* Submit */}
             <div className="flex gap-3">
               <Button
                 type="button"
@@ -223,11 +259,17 @@ export function DonatePage() {
               <Button
                 type="submit"
                 className="flex-1 bg-green-600 hover:bg-green-700"
-                disabled={isLoading || !formData.foodType}
+                disabled={isLoading || !formData.foodType || !addressVerified}
               >
                 {isLoading ? 'Posting...' : 'Post Donation'}
               </Button>
             </div>
+
+            {!addressVerified && formData.address.length > 0 && (
+              <p className="text-xs text-center text-amber-600">
+                ⚠ Select a verified address from the dropdown to enable posting
+              </p>
+            )}
           </form>
         </CardContent>
       </Card>

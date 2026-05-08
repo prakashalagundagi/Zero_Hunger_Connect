@@ -111,6 +111,8 @@ export const donationsAPI = {
     pickupTimeEnd: string;
     expiryDate: string;
     address: string;
+    lat?: number;
+    lng?: number;
   }) =>
     request<{ success: boolean; donation: any }>('/donations', {
       method: 'POST',

@@ -32,7 +32,14 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5000,
     allowedHosts: true,
-    // Proxy all /api requests to the Express backend running on port 8000
+    watch: {
+      ignored: [
+        '**/.local/**',
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/backend/**',
+      ],
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

@@ -1,20 +1,21 @@
-// MongoDB connection configuration
 const mongoose = require('mongoose');
 
-/**
- * Connect to MongoDB using the URI from environment variables.
- * Exits the process if connection fails — the server cannot run without a database.
- */
 const connectDB = async () => {
-  try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000, // Fail fast if MongoDB is unreachable
-    });
+  const uri = process.env.MONGODB_URI;
 
+  if (!uri) {
+    console.error('❌ MONGODB_URI environment variable is not set.');
+    process.exit(1);
+  }
+
+  try {
+    const conn = await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 10000,
+    });
     console.log(`✅ MongoDB connected: ${conn.connection.host}`);
   } catch (error) {
     console.error(`❌ MongoDB connection error: ${error.message}`);
-    console.error('Please check your MONGODB_URI in the .env file.');
+    console.error('Tip: Make sure your Atlas cluster allows connections from 0.0.0.0/0 (all IPs).');
     process.exit(1);
   }
 };

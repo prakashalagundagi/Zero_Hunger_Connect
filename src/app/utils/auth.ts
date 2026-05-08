@@ -1,62 +1,86 @@
-// Mock authentication utilities
+// Authentication utilities — wraps the backend JWT auth API
+// Replaces the previous mock-based implementation
 import { User, UserRole } from '../types';
-import { mockUsers, setCurrentUser as setMockCurrentUser } from '../data/mockData';
+import { authAPI, setToken, removeToken, getToken } from '../services/api';
 
-const AUTH_STORAGE_KEY = 'zhc_current_user';
+const AUTH_USER_KEY = 'zhc_current_user';
 
-export const login = (email: string, password: string): User | null => {
-  // Mock login - in real app, this would call backend API
-  const user = mockUsers.find(u => u.email === email);
-  if (user) {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
-    setMockCurrentUser(user);
-    return user;
-  }
-  return null;
+/** Store user object in localStorage for quick access without re-fetching */
+const storeUser = (user: User) => {
+  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
 };
 
-export const register = (data: {
+/** Remove stored user on logout */
+const clearUser = () => {
+  localStorage.removeItem(AUTH_USER_KEY);
+};
+
+/**
+ * Login with email and password.
+ * Stores the JWT token and user object in localStorage.
+ * Returns the user on success, null on failure.
+ */
+export const login = async (email: string, password: string): Promise<User | null> => {
+  try {
+    const res = await authAPI.login(email, password);
+    if (res.success) {
+      setToken(res.token);
+      storeUser(res.user);
+      return res.user as User;
+    }
+    return null;
+  } catch (error) {
+    console.error('Login error:', error);
+    return null;
+  }
+};
+
+/**
+ * Register a new user.
+ * Stores the JWT token and user object in localStorage.
+ */
+export const register = async (data: {
   name: string;
   email: string;
   password: string;
   role: UserRole;
   phone: string;
   address: string;
-}): User => {
-  // Mock registration - in real app, this would call backend API
-  const newUser: User = {
-    id: `user-${Date.now()}`,
-    name: data.name,
-    email: data.email,
-    role: data.role,
-    phone: data.phone,
-    location: {
-      lat: 40.7128 + (Math.random() - 0.5) * 0.1,
-      lng: -74.0060 + (Math.random() - 0.5) * 0.1,
-      address: data.address
-    },
-    avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.name}`,
-    createdAt: new Date().toISOString()
-  };
-  
-  mockUsers.push(newUser);
-  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newUser));
-  setMockCurrentUser(newUser);
-  return newUser;
+}): Promise<User> => {
+  const res = await authAPI.register(data);
+  if (res.success) {
+    setToken(res.token);
+    storeUser(res.user);
+    return res.user as User;
+  }
+  throw new Error('Registration failed');
 };
 
-export const logout = () => {
-  localStorage.removeItem(AUTH_STORAGE_KEY);
-  window.location.href = '/';
+/**
+ * Logout — removes JWT token and user from localStorage,
+ * then redirects to the login page.
+ */
+export const logout = async () => {
+  try {
+    await authAPI.logout();
+  } catch {
+    // Ignore errors — we always clear local state
+  } finally {
+    removeToken();
+    clearUser();
+    window.location.href = '/login';
+  }
 };
 
+/**
+ * Get the currently authenticated user from localStorage.
+ * Returns null if not logged in.
+ */
 export const getCurrentUser = (): User | null => {
-  const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+  const stored = localStorage.getItem(AUTH_USER_KEY);
   if (stored) {
     try {
-      const user = JSON.parse(stored);
-      setMockCurrentUser(user);
-      return user;
+      return JSON.parse(stored) as User;
     } catch {
       return null;
     }
@@ -64,6 +88,24 @@ export const getCurrentUser = (): User | null => {
   return null;
 };
 
+/** Returns true if a JWT token is present in localStorage */
 export const isAuthenticated = (): boolean => {
-  return getCurrentUser() !== null;
+  return getToken() !== null;
+};
+
+/**
+ * Refresh the user profile from the backend and update localStorage.
+ * Useful after profile updates.
+ */
+export const refreshCurrentUser = async (): Promise<User | null> => {
+  try {
+    const res = await authAPI.getMe();
+    if (res.success) {
+      storeUser(res.user);
+      return res.user as User;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 };

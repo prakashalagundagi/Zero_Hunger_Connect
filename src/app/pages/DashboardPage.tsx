@@ -1,27 +1,61 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { getCurrentUser } from '../utils/auth';
-import { mockDonations, mockRequests, mockDeliveries, mockImpactStats } from '../data/mockData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Package, Users, TrendingUp, Heart, Clock, MapPin, ArrowRight } from 'lucide-react';
 import { formatTimeAgo, getFoodTypeColor, getStatusColor } from '../utils/helpers';
+import { dashboardAPI } from '../services/api';
+import { FoodDonation, FoodRequest, ImpactStats } from '../types';
+
+interface DashboardData {
+  userStats: ImpactStats;
+  myDonations: FoodDonation[];
+  myRequests: FoodRequest[];
+  availableDonations: FoodDonation[];
+}
+
+const defaultStats: ImpactStats = {
+  mealsSaved: 0,
+  foodWasteReduced: 0,
+  peopleHelped: 0,
+  co2Reduced: 0,
+  donationsCompleted: 0,
+};
 
 export function DashboardPage() {
   const user = getCurrentUser();
-  const userStats = mockImpactStats[user?.id || ''] || {
-    mealsSaved: 0,
-    foodWasteReduced: 0,
-    peopleHelped: 0,
-    co2Reduced: 0,
-    donationsCompleted: 0
-  };
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Get user's relevant data based on role
-  const userDonations = mockDonations.filter(d => d.donorId === user?.id);
-  const userRequests = mockRequests.filter(r => r.receiverId === user?.id);
-  const userDeliveries = mockDeliveries.filter(d => d.volunteerId === user?.id);
-  const availableDonations = mockDonations.filter(d => d.status === 'available').slice(0, 3);
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      setIsLoading(true);
+      try {
+        const res = await dashboardAPI.getData();
+        setData(res.data);
+      } catch (err) {
+        console.error('Dashboard fetch error:', err);
+        // Show empty state rather than crashing on error
+        setData({
+          userStats: defaultStats,
+          myDonations: [],
+          myRequests: [],
+          availableDonations: [],
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboard();
+  }, []);
+
+  const userStats = data?.userStats || defaultStats;
+  const myDonations = data?.myDonations || [];
+  const myRequests = data?.myRequests || [];
+  const availableDonations = data?.availableDonations || [];
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -29,6 +63,27 @@ export function DashboardPage() {
     if (hour < 18) return 'Good afternoon';
     return 'Good evening';
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-lg shadow-sm p-6 animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/2 mb-2"></div>
+          <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="pt-6 h-24">
+                <div className="h-4 bg-gray-200 rounded mb-2"></div>
+                <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -80,7 +135,10 @@ export function DashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Waste Reduced</p>
-                <p className="text-2xl font-bold text-gray-900">{userStats.foodWasteReduced.toFixed(0)}<span className="text-sm text-gray-600">kg</span></p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {userStats.foodWasteReduced.toFixed(0)}
+                  <span className="text-sm text-gray-600">kg</span>
+                </p>
               </div>
               <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
                 <TrendingUp className="w-6 h-6 text-orange-600" />
@@ -94,7 +152,10 @@ export function DashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">CO₂ Reduced</p>
-                <p className="text-2xl font-bold text-gray-900">{userStats.co2Reduced.toFixed(0)}<span className="text-sm text-gray-600">kg</span></p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {userStats.co2Reduced.toFixed(0)}
+                  <span className="text-sm text-gray-600">kg</span>
+                </p>
               </div>
               <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
                 <Heart className="w-6 h-6 text-emerald-600" />
@@ -106,7 +167,7 @@ export function DashboardPage() {
 
       {/* Role-specific sections */}
       <div className="grid md:grid-cols-2 gap-6">
-        {/* For Donors: My Donations */}
+        {/* For Donors/NGOs: My Donations */}
         {(user?.role === 'donor' || user?.role === 'ngo') && (
           <Card>
             <CardHeader>
@@ -122,9 +183,9 @@ export function DashboardPage() {
               <CardDescription>Track your food donations</CardDescription>
             </CardHeader>
             <CardContent>
-              {userDonations.length > 0 ? (
+              {myDonations.length > 0 ? (
                 <div className="space-y-3">
-                  {userDonations.slice(0, 3).map((donation) => (
+                  {myDonations.slice(0, 3).map((donation) => (
                     <div key={donation.id} className="flex items-start justify-between p-3 bg-gray-50 rounded-lg">
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900 truncate">{donation.title}</p>
@@ -159,7 +220,7 @@ export function DashboardPage() {
           </Card>
         )}
 
-        {/* For Volunteers: Active Deliveries */}
+        {/* For Volunteers: placeholder (deliveries not wired to backend yet) */}
         {user?.role === 'volunteer' && (
           <Card>
             <CardHeader>
@@ -172,38 +233,13 @@ export function DashboardPage() {
               <CardDescription>Your delivery assignments</CardDescription>
             </CardHeader>
             <CardContent>
-              {userDeliveries.length > 0 ? (
-                <div className="space-y-3">
-                  {userDeliveries.map((delivery) => (
-                    <div key={delivery.id} className="p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-start justify-between mb-2">
-                        <p className="font-medium text-gray-900">{delivery.donationTitle}</p>
-                        <Badge className={`text-xs ${getStatusColor(delivery.status)}`}>
-                          {delivery.status.replace('_', ' ')}
-                        </Badge>
-                      </div>
-                      <div className="space-y-1 text-sm text-gray-600">
-                        <div className="flex items-center">
-                          <MapPin className="w-3 h-3 mr-1" />
-                          Pickup: {delivery.pickupLocation.address.split(',')[0]}
-                        </div>
-                        <div className="flex items-center">
-                          <MapPin className="w-3 h-3 mr-1" />
-                          Deliver: {delivery.deliveryLocation.address.split(',')[0]}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-6">
-                  <Package className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                  <p className="text-gray-500">No active deliveries</p>
-                  <Button asChild size="sm" className="mt-3 bg-green-600 hover:bg-green-700">
-                    <Link to="/browse">Browse Available Donations</Link>
-                  </Button>
-                </div>
-              )}
+              <div className="text-center py-6">
+                <Package className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                <p className="text-gray-500">No active deliveries</p>
+                <Button asChild size="sm" className="mt-3 bg-green-600 hover:bg-green-700">
+                  <Link to="/browse">Browse Available Donations</Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -259,7 +295,7 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* For Receivers: My Requests */}
+        {/* For Receivers/NGOs: My Requests */}
         {(user?.role === 'receiver' || user?.role === 'ngo') && (
           <Card>
             <CardHeader>
@@ -272,9 +308,9 @@ export function DashboardPage() {
               <CardDescription>Your food requests</CardDescription>
             </CardHeader>
             <CardContent>
-              {userRequests.length > 0 ? (
+              {myRequests.length > 0 ? (
                 <div className="space-y-3">
-                  {userRequests.map((request) => (
+                  {myRequests.map((request) => (
                     <div key={request.id} className="p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-start justify-between mb-2">
                         <p className="font-medium text-gray-900">{request.donationTitle}</p>

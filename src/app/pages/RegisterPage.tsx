@@ -21,17 +21,19 @@ export function RegisterPage() {
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      const user = register(formData);
+    try {
+      const user = await register(formData);
       toast.success(`Welcome, ${user.name}! Your account has been created.`);
       navigate('/');
+    } catch (err: any) {
+      toast.error(err.message || 'Registration failed. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 500);
+    }
   };
 
   return (
@@ -74,6 +76,7 @@ export function RegisterPage() {
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               required
+              minLength={6}
             />
           </div>
 
@@ -115,7 +118,7 @@ export function RegisterPage() {
             />
           </div>
 
-          <Button type="submit" className="w-full bg-green-600 hover:bg-green-700" disabled={isLoading}>
+          <Button type="submit" className="w-full bg-green-600 hover:bg-green-700" disabled={isLoading || !formData.role}>
             {isLoading ? 'Creating Account...' : 'Create Account'}
           </Button>
         </form>

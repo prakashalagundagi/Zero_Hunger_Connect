@@ -13,21 +13,23 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      const user = login(email, password);
+    try {
+      const user = await login(email, password);
       if (user) {
         toast.success(`Welcome back, ${user.name}!`);
         navigate('/');
       } else {
-        toast.error('Invalid credentials. Try one of the demo accounts.');
+        toast.error('Invalid email or password. Please try again.');
       }
+    } catch (err: any) {
+      toast.error(err.message || 'Login failed. Please check your credentials.');
+    } finally {
       setIsLoading(false);
-    }, 500);
+    }
   };
 
   const quickLogin = (demoEmail: string) => {
@@ -70,9 +72,9 @@ export function LoginPage() {
           </Button>
         </form>
 
-        {/* Demo Accounts */}
+        {/* Demo Accounts — register these first via /register */}
         <div className="mt-6 pt-6 border-t border-gray-200">
-          <p className="text-sm text-gray-600 mb-3">Quick demo login:</p>
+          <p className="text-sm text-gray-600 mb-3">Quick demo login (register these accounts first):</p>
           <div className="space-y-2">
             <Button
               type="button"
@@ -82,7 +84,7 @@ export function LoginPage() {
               onClick={() => quickLogin('sarah@example.com')}
             >
               <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 text-green-700 text-xs mr-2">D</span>
-              Donor - Sarah Johnson
+              Donor - sarah@example.com
             </Button>
             <Button
               type="button"
@@ -92,7 +94,7 @@ export function LoginPage() {
               onClick={() => quickLogin('mike@example.com')}
             >
               <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-xs mr-2">V</span>
-              Volunteer - Mike Chen
+              Volunteer - mike@example.com
             </Button>
             <Button
               type="button"
@@ -102,7 +104,7 @@ export function LoginPage() {
               onClick={() => quickLogin('contact@hopefoundation.org')}
             >
               <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs mr-2">N</span>
-              NGO - Hope Foundation
+              NGO - contact@hopefoundation.org
             </Button>
             <Button
               type="button"
@@ -112,7 +114,7 @@ export function LoginPage() {
               onClick={() => quickLogin('maria@example.com')}
             >
               <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs mr-2">R</span>
-              Receiver - Maria Garcia
+              Receiver - maria@example.com
             </Button>
           </div>
         </div>

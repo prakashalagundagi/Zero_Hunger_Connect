@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from 'sonner';
 import { getCurrentUser } from '../utils/auth';
 import { FoodType } from '../types';
-import { mockDonations } from '../data/mockData';
+import { donationsAPI } from '../services/api';
 
 export function DonatePage() {
   const navigate = useNavigate();
@@ -27,35 +27,30 @@ export function DonatePage() {
     address: user?.location.address || ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      const newDonation = {
-        id: `donation-${Date.now()}`,
-        donorId: user?.id || '',
-        donorName: user?.name || '',
-        donorAvatar: user?.avatar,
+    try {
+      await donationsAPI.create({
         title: formData.title,
         description: formData.description,
         foodType: formData.foodType,
-        quantity: parseFloat(formData.quantity),
+        quantity: formData.quantity,
         unit: formData.unit,
-        location: user?.location || { lat: 0, lng: 0, address: formData.address },
         pickupTimeStart: new Date(formData.pickupTimeStart).toISOString(),
         pickupTimeEnd: new Date(formData.pickupTimeEnd).toISOString(),
         expiryDate: new Date(formData.expiryDate).toISOString(),
-        status: 'available' as const,
-        createdAt: new Date().toISOString()
-      };
+        address: formData.address,
+      });
 
-      mockDonations.unshift(newDonation);
       toast.success('Food donation posted successfully!');
       navigate('/');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to post donation. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 500);
+    }
   };
 
   const foodTypes: { value: FoodType; label: string }[] = [
@@ -228,7 +223,7 @@ export function DonatePage() {
               <Button
                 type="submit"
                 className="flex-1 bg-green-600 hover:bg-green-700"
-                disabled={isLoading}
+                disabled={isLoading || !formData.foodType}
               >
                 {isLoading ? 'Posting...' : 'Post Donation'}
               </Button>

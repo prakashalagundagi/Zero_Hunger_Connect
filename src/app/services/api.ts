@@ -27,15 +27,28 @@ const request = async <T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> => {
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: getHeaders(),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers: getHeaders(),
+    });
+  } catch (networkErr: any) {
+    throw new Error('Unable to reach the server. Please try again.');
+  }
 
-  const data = await response.json();
+  let data: any;
+  try {
+    data = await response.json();
+  } catch {
+    if (!response.ok) {
+      throw new Error(`Server error (${response.status}). Please try again.`);
+    }
+    throw new Error('Unexpected response from server.');
+  }
 
   if (!response.ok) {
-    throw new Error(data.message || `Request failed with status ${response.status}`);
+    throw new Error(data?.message || `Request failed with status ${response.status}`);
   }
 
   return data as T;

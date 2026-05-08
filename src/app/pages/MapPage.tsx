@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getCurrentUser } from '../utils/auth';
@@ -11,7 +10,7 @@ import { MapPin, Package, Clock, Navigation, Loader2 } from 'lucide-react';
 import { formatDateTime, getFoodTypeColor, calculateDistance, formatDistance } from '../utils/helpers';
 import { FoodDonation } from '../types';
 
-// Fix Leaflet default icon paths broken by bundlers
+// Fix Leaflet default icon broken by bundlers
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -19,8 +18,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-// Custom green icon for donations
-const donationIcon = new L.Icon({
+const greenIcon = new L.Icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
   iconSize: [25, 41],
@@ -29,8 +27,7 @@ const donationIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
-// Custom blue icon for current user
-const userIcon = new L.Icon({
+const blueIcon = new L.Icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
   iconSize: [25, 41],
@@ -39,116 +36,123 @@ const userIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
-// Fly to selected donation marker
-function FlyToMarker({ position }: { position: [number, number] | null }) {
-  const map = useMap();
-  useEffect(() => {
-    if (position) {
-      map.flyTo(position, 15, { duration: 0.8 });
-    }
-  }, [position, map]);
-  return null;
-}
-
 export function MapPage() {
   const user = getCurrentUser();
+  const mapRef = useRef<L.Map | null>(null);
+  const mapDivRef = useRef<HTMLDivElement>(null);
+  const markersRef = useRef<L.Marker[]>([]);
+
   const [donations, setDonations] = useState<FoodDonation[]>([]);
   const [selectedDonation, setSelectedDonation] = useState<FoodDonation | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [flyTo, setFlyTo] = useState<[number, number] | null>(null);
 
   const center: [number, number] = [
-    user?.location.lat || 12.9716,
-    user?.location.lng || 77.5946,
+    user?.location?.lat || 12.9716,
+    user?.location?.lng || 77.5946,
   ];
 
+  // Fetch donations from real backend
   useEffect(() => {
-    const fetchDonations = async () => {
-      try {
-        const res = await donationsAPI.getAll({ status: 'available' });
-        setDonations(res.donations || []);
-      } catch {
-        setDonations([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchDonations();
+    donationsAPI.getAll({ status: 'available' })
+      .then((res) => setDonations(res.donations || []))
+      .catch(() => setDonations([]))
+      .finally(() => setIsLoading(false));
   }, []);
+
+  // Initialize map once
+  useEffect(() => {
+    if (!mapDivRef.current || mapRef.current) return;
+
+    const map = L.map(mapDivRef.current, {
+      center,
+      zoom: 13,
+      zoomControl: true,
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    // User location marker
+    if (user) {
+      L.marker(center, { icon: blueIcon })
+        .addTo(map)
+        .bindPopup(`<strong>📍 Your Location</strong><br/>${user.name}`);
+    }
+
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  // Add/update donation markers whenever donations change
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Remove old donation markers
+    markersRef.current.forEach((m) => m.remove());
+    markersRef.current = [];
+
+    donations.forEach((donation) => {
+      const marker = L.marker([donation.location.lat, donation.location.lng], { icon: greenIcon })
+        .addTo(map)
+        .bindPopup(`
+          <div style="min-width:160px">
+            <strong style="font-size:13px">${donation.title}</strong><br/>
+            <span style="color:#555;font-size:12px">${donation.donorName}</span><br/>
+            <span style="color:#777;font-size:11px">${donation.location.address}</span>
+          </div>
+        `);
+
+      marker.on('click', () => {
+        setSelectedDonation(donation);
+        map.flyTo([donation.location.lat, donation.location.lng], 15, { duration: 0.8 });
+      });
+
+      markersRef.current.push(marker);
+    });
+  }, [donations]);
+
+  const handleSidebarSelect = (donation: FoodDonation) => {
+    setSelectedDonation(donation);
+    if (mapRef.current) {
+      mapRef.current.flyTo([donation.location.lat, donation.location.lng], 15, { duration: 0.8 });
+      // Open the corresponding popup
+      const idx = donations.findIndex((d) => d.id === donation.id);
+      if (idx >= 0 && markersRef.current[idx]) {
+        markersRef.current[idx].openPopup();
+      }
+    }
+  };
 
   const donationsWithDistance = donations.map((d) => ({
     ...d,
-    distance: calculateDistance(
-      center[0], center[1],
-      d.location.lat, d.location.lng
-    ),
+    distance: calculateDistance(center[0], center[1], d.location.lat, d.location.lng),
   }));
-
-  const handleSelect = (donation: FoodDonation) => {
-    setSelectedDonation(donation);
-    setFlyTo([donation.location.lat, donation.location.lng]);
-  };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Food Donations Map</h1>
-        <p className="text-gray-600">Live map of available food donations near you (Bengaluru, Karnataka)</p>
+        <p className="text-gray-600">Live map of available food donations near you — Bengaluru, Karnataka</p>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Map */}
         <div className="lg:col-span-2">
           <Card className="overflow-hidden">
-            <div className="h-[600px] w-full relative">
+            <div className="relative h-[600px]">
               {isLoading && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80">
+                <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-white/80">
                   <Loader2 className="w-8 h-8 animate-spin text-green-600" />
                 </div>
               )}
-              <MapContainer
-                center={center}
-                zoom={13}
-                style={{ height: '100%', width: '100%' }}
-                scrollWheelZoom={true}
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-
-                {/* User location marker */}
-                {user && (
-                  <Marker position={center} icon={userIcon}>
-                    <Popup>
-                      <div className="text-sm font-medium">📍 Your Location<br />{user.name}</div>
-                    </Popup>
-                  </Marker>
-                )}
-
-                {/* Donation markers */}
-                {donationsWithDistance.map((donation) => (
-                  <Marker
-                    key={donation.id}
-                    position={[donation.location.lat, donation.location.lng]}
-                    icon={donationIcon}
-                    eventHandlers={{ click: () => handleSelect(donation) }}
-                  >
-                    <Popup>
-                      <div className="min-w-[180px]">
-                        <p className="font-semibold text-gray-900 mb-1">{donation.title}</p>
-                        <p className="text-xs text-gray-600 mb-1">{donation.donorName}</p>
-                        <p className="text-xs text-gray-500 mb-2">{donation.location.address}</p>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${getFoodTypeColor(donation.foodType)}`}>
-                          {donation.foodType}
-                        </span>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
-
-                <FlyToMarker position={flyTo} />
-              </MapContainer>
+              <div ref={mapDivRef} className="h-full w-full" />
             </div>
           </Card>
         </div>
@@ -176,7 +180,7 @@ export function MapPage() {
                         className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
                           selectedDonation?.id === donation.id ? 'bg-green-50' : ''
                         }`}
-                        onClick={() => handleSelect(donation)}
+                        onClick={() => handleSidebarSelect(donation)}
                       >
                         <div className="flex items-start gap-3">
                           <img

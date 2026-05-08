@@ -54,8 +54,8 @@ const register = async (req, res) => {
       role,
       phone: phone || '',
       location: {
-        lat: 40.7128 + latOffset,
-        lng: -74.006 + lngOffset,
+        lat: 12.9716 + latOffset,
+        lng: 77.5946 + lngOffset,
         address: address || '',
       },
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`,

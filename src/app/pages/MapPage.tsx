@@ -12,8 +12,8 @@ export function MapPage() {
   const user = getCurrentUser();
   const [selectedDonation, setSelectedDonation] = useState<FoodDonation | null>(null);
   const [mapCenter] = useState({
-    lat: user?.location.lat || 40.7128,
-    lng: user?.location.lng || -74.0060
+    lat: user?.location.lat || 12.9716,
+    lng: user?.location.lng || 77.5946
   });
 
   // Filter only available donations

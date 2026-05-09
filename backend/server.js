@@ -13,6 +13,7 @@ const requestRoutes = require('./routes/requests');
 const dashboardRoutes = require('./routes/dashboard');
 const deliveryRoutes = require('./routes/deliveries');
 const userRoutes = require('./routes/users');
+const notificationRoutes = require('./routes/notifications');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -53,6 +54,7 @@ app.use('/api/requests', requestRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/deliveries', deliveryRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // ── 404 handler ──────────────────────────────────────────────────────────────
 app.use((req, res) => {

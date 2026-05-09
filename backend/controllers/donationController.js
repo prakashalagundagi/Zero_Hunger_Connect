@@ -1,6 +1,7 @@
 // Donation controller — CRUD operations for food donations
 const Donation = require('../models/Donation');
 const User = require('../models/User');
+const { createNotificationsForMany } = require('./notificationController');
 
 /**
  * Format a Mongoose donation document into the shape the frontend expects.
@@ -109,6 +110,25 @@ const createDonation = async (req, res) => {
     });
 
     res.status(201).json({ success: true, donation: formatDonation(donation) });
+
+    // After responding, notify all receivers, NGOs, and volunteers about the new donation
+    setImmediate(async () => {
+      try {
+        const recipients = await User.find({
+          role: { $in: ['receiver', 'ngo', 'volunteer'] },
+          _id: { $ne: req.user._id },
+        }).select('_id');
+        const userIds = recipients.map((u) => u._id);
+        await createNotificationsForMany(userIds, {
+          type: 'new_donation',
+          title: 'New food donation available!',
+          message: `${req.user.name} just posted "${donation.title}" — ${donation.quantity} ${donation.unit} available near ${donation.location.address.split(',')[0]}.`,
+          link: '/browse',
+        });
+      } catch (err) {
+        console.error('Notification broadcast error:', err.message);
+      }
+    });
   } catch (error) {
     console.error('CreateDonation error:', error);
     res.status(500).json({ success: false, message: 'Server error creating donation' });

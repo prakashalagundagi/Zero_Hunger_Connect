@@ -1,5 +1,6 @@
-import { Outlet, useLocation, Link } from 'react-router';
-import { Home, Package, Search, Map, FileText, Truck, User, TrendingUp, BookOpen, Bell, LogOut } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Outlet, useLocation, Link, useNavigate } from 'react-router';
+import { Home, Package, Search, Map, FileText, Truck, User, TrendingUp, BookOpen, Bell, LogOut, CheckCheck, Trash2, Gift, MessageSquare, CheckCircle, XCircle, Bike } from 'lucide-react';
 import { getCurrentUser, logout } from '../utils/auth';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -9,12 +10,84 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { mockNotifications } from '../data/mockData';
+import { notificationsAPI } from '../services/api';
+import { formatTimeAgo } from '../utils/helpers';
+
+interface AppNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  read: boolean;
+  link: string;
+  createdAt: string;
+}
+
+const typeIcon: Record<string, JSX.Element> = {
+  new_donation: <Gift className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />,
+  request_received: <MessageSquare className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />,
+  request_accepted: <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />,
+  request_rejected: <XCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />,
+  delivery_assigned: <Bike className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" />,
+  delivery_completed: <CheckCheck className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />,
+};
 
 export function RootLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const user = getCurrentUser();
-  const unreadCount = mockNotifications.filter(n => n.userId === user?.id && !n.read).length;
+
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [open, setOpen] = useState(false);
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const res = await notificationsAPI.getAll();
+      setNotifications(res.notifications || []);
+      setUnreadCount(res.unreadCount || 0);
+    } catch {
+      // Silently fail — don't disrupt the UI if notifications can't load
+    }
+  }, []);
+
+  // Initial fetch + poll every 30 seconds for new notifications
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30_000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
+  // When the dropdown opens, mark all as read after a short delay
+  const handleOpenChange = async (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (isOpen && unreadCount > 0) {
+      // Optimistically clear badge immediately
+      setUnreadCount(0);
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      try {
+        await notificationsAPI.markAllAsRead();
+      } catch {
+        // Best-effort
+      }
+    }
+  };
+
+  const handleClearAll = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await notificationsAPI.clearAll();
+      setNotifications([]);
+      setUnreadCount(0);
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleNotificationClick = (notification: AppNotification) => {
+    setOpen(false);
+    if (notification.link) navigate(notification.link);
+  };
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: Home },
@@ -24,7 +97,7 @@ export function RootLayout() {
     { name: 'Requests', href: '/requests', icon: FileText },
     { name: 'Deliveries', href: '/deliveries', icon: Truck, roles: ['volunteer'] },
     { name: 'Impact', href: '/impact', icon: TrendingUp },
-    { name: 'Guidelines', href: '/guidelines', icon: BookOpen }
+    { name: 'Guidelines', href: '/guidelines', icon: BookOpen },
   ];
 
   const visibleNavigation = navigation.filter(
@@ -50,55 +123,82 @@ export function RootLayout() {
 
             {/* User Menu */}
             <div className="flex items-center space-x-4">
-              {/* Notifications */}
-              <DropdownMenu>
+              {/* Notifications Bell */}
+              <DropdownMenu open={open} onOpenChange={handleOpenChange}>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative p-2 text-gray-600 hover:text-gray-900">
                     <Bell className="w-5 h-5" />
                     {unreadCount > 0 && (
-                      <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-red-500 text-white">
-                        {unreadCount}
-                      </Badge>
+                      <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
                     )}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
-                  <div className="px-4 py-3 border-b border-gray-200">
-                    <h3 className="font-semibold text-gray-900">Notifications</h3>
-                    <p className="text-xs text-gray-500">{unreadCount} unread</p>
-                  </div>
-                  {mockNotifications
-                    .filter(n => n.userId === user?.id)
-                    .slice(0, 10)
-                    .map((notification) => (
-                      <DropdownMenuItem
-                        key={notification.id}
-                        className={`cursor-pointer px-4 py-3 ${
-                          !notification.read ? 'bg-blue-50' : ''
-                        }`}
-                      >
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-start justify-between">
-                            <p className={`text-sm ${!notification.read ? 'font-semibold' : 'font-normal'}`}>
-                              {notification.title}
-                            </p>
-                            {!notification.read && (
-                              <div className="w-2 h-2 bg-blue-500 rounded-full ml-2 mt-1"></div>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-600">{notification.message}</p>
-                          <p className="text-xs text-gray-400">
-                            {new Date(notification.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </DropdownMenuItem>
-                    ))}
-                  {mockNotifications.filter(n => n.userId === user?.id).length === 0 && (
-                    <div className="px-4 py-8 text-center text-gray-500">
-                      <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">No notifications</p>
+                <DropdownMenuContent align="end" className="w-96 max-h-[480px] overflow-hidden flex flex-col p-0">
+                  {/* Header */}
+                  <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">Notifications</h3>
+                      <p className="text-xs text-gray-500">
+                        {notifications.length === 0 ? 'All caught up!' : `${notifications.length} notification${notifications.length !== 1 ? 's' : ''}`}
+                      </p>
                     </div>
-                  )}
+                    {notifications.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 h-7 px-2"
+                        onClick={handleClearAll}
+                      >
+                        <Trash2 className="w-3 h-3 mr-1" />
+                        Clear all
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Notification list */}
+                  <div className="overflow-y-auto flex-1">
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-10 text-center">
+                        <Bell className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                        <p className="text-sm text-gray-500 font-medium">No notifications yet</p>
+                        <p className="text-xs text-gray-400 mt-1">You'll be notified when donations are posted or requests are updated</p>
+                      </div>
+                    ) : (
+                      notifications.map((notification) => (
+                        <DropdownMenuItem
+                          key={notification.id}
+                          className={`cursor-pointer px-4 py-3 border-b border-gray-100 last:border-0 focus:bg-gray-50 ${
+                            !notification.read ? 'bg-blue-50/60 hover:bg-blue-50' : 'hover:bg-gray-50'
+                          }`}
+                          onClick={() => handleNotificationClick(notification)}
+                        >
+                          <div className="flex items-start gap-3 w-full">
+                            <div className="mt-0.5">
+                              {typeIcon[notification.type] ?? <Bell className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className={`text-sm leading-snug ${!notification.read ? 'font-semibold text-gray-900' : 'font-medium text-gray-800'}`}>
+                                  {notification.title}
+                                </p>
+                                {!notification.read && (
+                                  <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-600 mt-0.5 leading-relaxed line-clamp-2">
+                                {notification.message}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                {formatTimeAgo(notification.createdAt)}
+                              </p>
+                            </div>
+                          </div>
+                        </DropdownMenuItem>
+                      ))
+                    )}
+                  </div>
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -191,13 +291,8 @@ export function RootLayout() {
       </div>
 
       <style>{`
-        .hide-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .hide-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
     </div>
   );

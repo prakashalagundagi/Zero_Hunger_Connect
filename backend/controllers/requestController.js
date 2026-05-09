@@ -1,6 +1,7 @@
 // Request controller — manages food requests from receivers/NGOs to donors
 const Request = require('../models/Request');
 const Donation = require('../models/Donation');
+const { createNotification } = require('./notificationController');
 
 /**
  * Format a Mongoose request document into the shape the frontend expects.
@@ -60,6 +61,21 @@ const createRequest = async (req, res) => {
     });
 
     res.status(201).json({ success: true, request: formatRequest(request) });
+
+    // Notify the donor that someone has requested their donation
+    setImmediate(async () => {
+      try {
+        await createNotification({
+          userId: donation.donorId,
+          type: 'request_received',
+          title: 'Someone requested your food!',
+          message: `${req.user.name} has requested "${donation.title}". Go to Requests to accept or decline.`,
+          link: '/requests',
+        });
+      } catch (err) {
+        console.error('Notification error:', err.message);
+      }
+    });
   } catch (error) {
     console.error('CreateRequest error:', error);
     res.status(500).json({ success: false, message: 'Server error creating request' });
@@ -146,6 +162,31 @@ const respondToRequest = async (req, res) => {
     }
 
     res.json({ success: true, request: formatRequest(request) });
+
+    // Notify the receiver of the outcome
+    setImmediate(async () => {
+      try {
+        if (status === 'accepted') {
+          await createNotification({
+            userId: request.receiverId,
+            type: 'request_accepted',
+            title: 'Your food request was accepted!',
+            message: `Great news! Your request for "${request.donationTitle}" has been accepted. Please coordinate pickup with the donor.`,
+            link: '/requests',
+          });
+        } else {
+          await createNotification({
+            userId: request.receiverId,
+            type: 'request_rejected',
+            title: 'Food request update',
+            message: `Your request for "${request.donationTitle}" was not approved this time. Browse other available donations.`,
+            link: '/browse',
+          });
+        }
+      } catch (err) {
+        console.error('Notification error:', err.message);
+      }
+    });
   } catch (error) {
     console.error('RespondToRequest error:', error);
     res.status(500).json({ success: false, message: 'Server error responding to request' });

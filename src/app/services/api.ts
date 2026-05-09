@@ -192,3 +192,19 @@ export const usersAPI = {
     return request<{ success: boolean; users: any[]; total: number }>(`/users${qs}`);
   },
 };
+
+// ── Notifications API ─────────────────────────────────────────────────────────
+
+export const notificationsAPI = {
+  getAll: () =>
+    request<{ success: boolean; notifications: any[]; unreadCount: number }>('/notifications'),
+
+  markAsRead: (id: string) =>
+    request<{ success: boolean }>(`/notifications/${id}/read`, { method: 'PATCH' }),
+
+  markAllAsRead: () =>
+    request<{ success: boolean }>('/notifications/read-all', { method: 'PATCH' }),
+
+  clearAll: () =>
+    request<{ success: boolean }>('/notifications', { method: 'DELETE' }),
+};

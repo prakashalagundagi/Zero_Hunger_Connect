@@ -81,40 +81,40 @@ export function LoginPage() {
               variant="outline"
               size="sm"
               className="w-full justify-start"
-              onClick={() => quickLogin('sarah@example.com')}
+              onClick={() => quickLogin('priya@example.com')}
             >
               <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 text-green-700 text-xs mr-2">D</span>
-              Donor - sarah@example.com
+              Donor — Priya Sharma
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="w-full justify-start"
-              onClick={() => quickLogin('mike@example.com')}
+              onClick={() => quickLogin('arjun@example.com')}
             >
               <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-xs mr-2">V</span>
-              Volunteer - mike@example.com
+              Volunteer — Arjun Kumar
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="w-full justify-start"
-              onClick={() => quickLogin('contact@hopefoundation.org')}
+              onClick={() => quickLogin('contact@akshayapatra.org')}
             >
               <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-xs mr-2">N</span>
-              NGO - contact@hopefoundation.org
+              NGO — Akshaya Patra Foundation
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="w-full justify-start"
-              onClick={() => quickLogin('maria@example.com')}
+              onClick={() => quickLogin('meena@example.com')}
             >
               <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs mr-2">R</span>
-              Receiver - maria@example.com
+              Receiver — Meena Reddy
             </Button>
           </div>
         </div>

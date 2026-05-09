@@ -15,6 +15,9 @@ const deliveryRoutes = require('./routes/deliveries');
 const userRoutes = require('./routes/users');
 const notificationRoutes = require('./routes/notifications');
 
+// Background jobs
+const { startExpiryChecker, runExpiryCheck } = require('./jobs/expiryChecker');
+
 const app = express();
 const PORT = process.env.PORT || 8000;
 
@@ -56,6 +59,13 @@ app.use('/api/deliveries', deliveryRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/notifications', notificationRoutes);
 
+// ── Admin / internal endpoints ────────────────────────────────────────────────
+// Manual trigger for the expiry checker — useful for testing without waiting an hour
+app.post('/api/admin/run-expiry-check', async (req, res) => {
+  await runExpiryCheck();
+  res.json({ success: true, message: 'Expiry check completed' });
+});
+
 // ── 404 handler ──────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` });
@@ -74,6 +84,8 @@ const start = async () => {
     console.log(`🚀 Backend server running on http://localhost:${PORT}`);
     console.log(`📡 API available at http://localhost:${PORT}/api`);
   });
+  // Start the hourly expiry checker after DB is connected
+  startExpiryChecker();
 };
 
 start();

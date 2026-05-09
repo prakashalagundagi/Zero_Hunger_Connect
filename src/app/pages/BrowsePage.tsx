@@ -8,7 +8,7 @@ import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
-import { Search, MapPin, Clock, Package } from 'lucide-react';
+import { Search, MapPin, Clock, Package, AlertTriangle } from 'lucide-react';
 import { formatTimeAgo, formatDateTime, getFoodTypeColor, getStatusColor, calculateDistance, formatDistance } from '../utils/helpers';
 import { toast } from 'sonner';
 import { FoodDonation, DonationStatus } from '../types';
@@ -136,6 +136,7 @@ export function BrowsePage() {
                   <SelectItem value="claimed">Claimed</SelectItem>
                   <SelectItem value="picked_up">Picked Up</SelectItem>
                   <SelectItem value="delivered">Delivered</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -167,8 +168,14 @@ export function BrowsePage() {
       {!isLoadingDonations && (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {sortedDonations.map((donation) => (
-            <Card key={donation.id} className="hover:shadow-lg transition-shadow">
+            <Card key={donation.id} className={`transition-shadow ${donation.status === 'expired' ? 'opacity-60' : 'hover:shadow-lg'}`}>
               <CardContent className="pt-6">
+                {donation.status === 'expired' && (
+                  <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3 text-sm text-red-700">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <span>This donation listing has expired</span>
+                  </div>
+                )}
                 {/* Donor Info */}
                 <div className="flex items-center gap-3 mb-4">
                   <img

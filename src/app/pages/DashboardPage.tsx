@@ -4,8 +4,8 @@ import { getCurrentUser } from '../utils/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Package, Users, TrendingUp, Heart, Clock, MapPin, ArrowRight } from 'lucide-react';
-import { formatTimeAgo, getFoodTypeColor, getStatusColor } from '../utils/helpers';
+import { Package, Users, TrendingUp, Heart, Clock, MapPin, ArrowRight, AlertTriangle } from 'lucide-react';
+import { formatTimeAgo, getFoodTypeColor, getStatusColor, formatDateTime } from '../utils/helpers';
 import { dashboardAPI } from '../services/api';
 import { FoodDonation, FoodRequest, ImpactStats } from '../types';
 
@@ -57,6 +57,17 @@ export function DashboardPage() {
   const myRequests = data?.myRequests || [];
   const availableDonations = data?.availableDonations || [];
 
+  // Donations expiring within the next 2 hours (still active)
+  const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000);
+  const expiringSoon = myDonations.filter((d) => {
+    if (d.status !== 'available' && d.status !== 'claimed') return false;
+    const end = new Date(d.pickupTimeEnd || d.expiryDate);
+    return end <= twoHoursFromNow && end > new Date();
+  });
+
+  // Donations that are already expired but shown in this session
+  const recentlyExpired = myDonations.filter((d) => d.status === 'expired');
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -99,6 +110,32 @@ export function DashboardPage() {
           {user?.role === 'receiver' && "We're here to help connect you with available food resources."}
         </p>
       </div>
+
+      {/* Expiry Warnings — only shown to donors/NGOs */}
+      {(user?.role === 'donor' || user?.role === 'ngo') && expiringSoon.length > 0 && (
+        <div className="space-y-2">
+          {expiringSoon.map((d) => (
+            <div key={d.id} className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
+              <div>
+                <span className="font-medium">Expiring soon:</span> "{d.title}" — pickup window closes at{' '}
+                <span className="font-medium">{formatDateTime(d.pickupTimeEnd || d.expiryDate)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Recently expired notice */}
+      {(user?.role === 'donor' || user?.role === 'ngo') && recentlyExpired.length > 0 && expiringSoon.length === 0 && (
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <div>
+            <span className="font-medium">{recentlyExpired.length} donation{recentlyExpired.length > 1 ? 's' : ''} expired.</span>{' '}
+            Check your dashboard for details or post a new donation anytime.
+          </div>
+        </div>
+      )}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

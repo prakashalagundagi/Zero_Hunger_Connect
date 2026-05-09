@@ -159,3 +159,36 @@ export const dashboardAPI = {
   getPlatformStats: () =>
     request<{ success: boolean; platformStats: any }>('/dashboard/platform'),
 };
+
+// ── Deliveries API ────────────────────────────────────────────────────────────
+
+export const deliveriesAPI = {
+  getMy: () =>
+    request<{ success: boolean; deliveries: any[] }>('/deliveries'),
+
+  create: (data: {
+    donationId: string;
+    deliveryAddress?: string;
+    deliveryLat?: number;
+    deliveryLng?: number;
+  }) =>
+    request<{ success: boolean; delivery: any }>('/deliveries', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateStatus: (id: string, status: string) =>
+    request<{ success: boolean; delivery: any }>(`/deliveries/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+};
+
+// ── Users API ─────────────────────────────────────────────────────────────────
+
+export const usersAPI = {
+  getAll: (role?: string) => {
+    const qs = role ? `?role=${role}` : '';
+    return request<{ success: boolean; users: any[]; total: number }>(`/users${qs}`);
+  },
+};

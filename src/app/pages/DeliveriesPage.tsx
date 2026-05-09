@@ -1,15 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { mockDeliveries } from '../data/mockData';
 import { getCurrentUser } from '../utils/auth';
+import { deliveriesAPI } from '../services/api';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { MapPin, Package, Navigation, CheckCircle2, Map } from 'lucide-react';
+import { MapPin, Package, Navigation, CheckCircle2, Map, Loader2 } from 'lucide-react';
 import { formatTimeAgo, getStatusColor } from '../utils/helpers';
 import { toast } from 'sonner';
-import { Delivery, DeliveryStatus } from '../types';
 
 // Fix Leaflet default icons
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -32,7 +31,7 @@ const greenIcon = new L.Icon({
 });
 
 interface DeliveryMapProps {
-  delivery: Delivery;
+  delivery: any;
 }
 
 function DeliveryMap({ delivery }: DeliveryMapProps) {
@@ -44,7 +43,6 @@ function DeliveryMap({ delivery }: DeliveryMapProps) {
 
     const pickup: [number, number] = [delivery.pickupLocation.lat, delivery.pickupLocation.lng];
     const dropoff: [number, number] = [delivery.deliveryLocation.lat, delivery.deliveryLocation.lng];
-
     const midLat = (pickup[0] + dropoff[0]) / 2;
     const midLng = (pickup[1] + dropoff[1]) / 2;
 
@@ -69,15 +67,9 @@ function DeliveryMap({ delivery }: DeliveryMapProps) {
       .addTo(map)
       .bindPopup(`<strong>🏠 Delivery</strong><br/>${delivery.deliveryLocation.address}`);
 
-    L.polyline([pickup, dropoff], {
-      color: '#16a34a',
-      weight: 3,
-      dashArray: '6, 6',
-      opacity: 0.8,
-    }).addTo(map);
+    L.polyline([pickup, dropoff], { color: '#16a34a', weight: 3, dashArray: '6, 6', opacity: 0.8 }).addTo(map);
 
     map.fitBounds([pickup, dropoff], { padding: [40, 40] });
-
     mapRef.current = map;
 
     return () => {
@@ -89,32 +81,40 @@ function DeliveryMap({ delivery }: DeliveryMapProps) {
   return <div ref={mapDivRef} className="h-48 w-full rounded-lg overflow-hidden" />;
 }
 
+type DeliveryStatus = 'assigned' | 'picked_up' | 'in_transit' | 'delivered';
+
 export function DeliveriesPage() {
   const user = getCurrentUser();
-  const [deliveries, setDeliveries] = useState(mockDeliveries);
+  const [deliveries, setDeliveries] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [expandedMap, setExpandedMap] = useState<string | null>(null);
 
-  const userDeliveries = deliveries.filter(d => d.volunteerId === user?.id);
+  useEffect(() => {
+    deliveriesAPI.getMy()
+      .then(res => setDeliveries(res.deliveries || []))
+      .catch(() => setDeliveries([]))
+      .finally(() => setIsLoading(false));
+  }, []);
 
-  const updateDeliveryStatus = (deliveryId: string, newStatus: DeliveryStatus) => {
-    setDeliveries(prev =>
-      prev.map(d =>
-        d.id === deliveryId
-          ? { ...d, status: newStatus, completedAt: newStatus === 'delivered' ? new Date().toISOString() : d.completedAt }
-          : d
-      )
-    );
-
-    const statusMessages: Record<DeliveryStatus, string> = {
-      assigned: 'Delivery assigned',
-      picked_up: 'Food marked as picked up',
-      in_transit: 'Delivery in transit',
-      delivered: 'Delivery completed! Thank you for your service.',
-    };
-    toast.success(statusMessages[newStatus]);
+  const updateDeliveryStatus = async (deliveryId: string, newStatus: DeliveryStatus) => {
+    try {
+      const res = await deliveriesAPI.updateStatus(deliveryId, newStatus);
+      setDeliveries(prev =>
+        prev.map(d => d.id === deliveryId ? { ...d, ...res.delivery } : d)
+      );
+      const statusMessages: Record<DeliveryStatus, string> = {
+        assigned: 'Delivery assigned',
+        picked_up: 'Food marked as picked up',
+        in_transit: 'Delivery in transit',
+        delivered: 'Delivery completed! Thank you for your service.',
+      };
+      toast.success(statusMessages[newStatus]);
+    } catch {
+      toast.error('Failed to update delivery status');
+    }
   };
 
-  const getNextAction = (status: DeliveryStatus): { label: string; nextStatus: DeliveryStatus } | null => {
+  const getNextAction = (status: DeliveryStatus) => {
     const actions: Record<DeliveryStatus, { label: string; nextStatus: DeliveryStatus } | null> = {
       assigned: { label: 'Mark as Picked Up', nextStatus: 'picked_up' },
       picked_up: { label: 'Start Delivery', nextStatus: 'in_transit' },
@@ -137,7 +137,7 @@ export function DeliveriesPage() {
           <CardContent className="pt-6">
             <div className="text-center">
               <p className="text-sm text-gray-600 mb-1">Total</p>
-              <p className="text-3xl font-bold text-gray-900">{userDeliveries.length}</p>
+              <p className="text-3xl font-bold text-gray-900">{deliveries.length}</p>
             </div>
           </CardContent>
         </Card>
@@ -146,7 +146,7 @@ export function DeliveriesPage() {
             <div className="text-center">
               <p className="text-sm text-gray-600 mb-1">Active</p>
               <p className="text-3xl font-bold text-orange-600">
-                {userDeliveries.filter(d => d.status !== 'delivered').length}
+                {deliveries.filter(d => d.status !== 'delivered').length}
               </p>
             </div>
           </CardContent>
@@ -156,7 +156,7 @@ export function DeliveriesPage() {
             <div className="text-center">
               <p className="text-sm text-gray-600 mb-1">Completed</p>
               <p className="text-3xl font-bold text-green-600">
-                {userDeliveries.filter(d => d.status === 'delivered').length}
+                {deliveries.filter(d => d.status === 'delivered').length}
               </p>
             </div>
           </CardContent>
@@ -166,7 +166,7 @@ export function DeliveriesPage() {
             <div className="text-center">
               <p className="text-sm text-gray-600 mb-1">In Transit</p>
               <p className="text-3xl font-bold text-blue-600">
-                {userDeliveries.filter(d => d.status === 'in_transit').length}
+                {deliveries.filter(d => d.status === 'in_transit').length}
               </p>
             </div>
           </CardContent>
@@ -175,9 +175,13 @@ export function DeliveriesPage() {
 
       {/* Deliveries List */}
       <div className="space-y-4">
-        {userDeliveries.length > 0 ? (
-          userDeliveries.map((delivery) => {
-            const nextAction = getNextAction(delivery.status);
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-10 h-10 animate-spin text-green-500" />
+          </div>
+        ) : deliveries.length > 0 ? (
+          deliveries.map((delivery) => {
+            const nextAction = getNextAction(delivery.status as DeliveryStatus);
             const isCompleted = delivery.status === 'delivered';
             const isMapOpen = expandedMap === delivery.id;
 
@@ -210,16 +214,8 @@ export function DeliveriesPage() {
                         <p className="text-xs font-medium text-blue-900 mb-1">Pickup Location</p>
                         <p className="text-sm text-blue-800">{delivery.pickupLocation.address}</p>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          window.open(
-                            `https://www.openstreetmap.org/directions?from=&to=${delivery.pickupLocation.lat}%2C${delivery.pickupLocation.lng}`,
-                            '_blank'
-                          )
-                        }
-                      >
+                      <Button size="sm" variant="outline"
+                        onClick={() => window.open(`https://www.openstreetmap.org/directions?from=&to=${delivery.pickupLocation.lat}%2C${delivery.pickupLocation.lng}`, '_blank')}>
                         <Navigation className="w-3 h-3 mr-1" />
                         Navigate
                       </Button>
@@ -233,16 +229,8 @@ export function DeliveriesPage() {
                         <p className="text-xs font-medium text-green-900 mb-1">Delivery Location</p>
                         <p className="text-sm text-green-800">{delivery.deliveryLocation.address}</p>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          window.open(
-                            `https://www.openstreetmap.org/directions?from=&to=${delivery.deliveryLocation.lat}%2C${delivery.deliveryLocation.lng}`,
-                            '_blank'
-                          )
-                        }
-                      >
+                      <Button size="sm" variant="outline"
+                        onClick={() => window.open(`https://www.openstreetmap.org/directions?from=&to=${delivery.deliveryLocation.lat}%2C${delivery.deliveryLocation.lng}`, '_blank')}>
                         <Navigation className="w-3 h-3 mr-1" />
                         Navigate
                       </Button>
@@ -251,8 +239,7 @@ export function DeliveriesPage() {
 
                   {/* Toggle Route Map */}
                   <Button
-                    variant="outline"
-                    size="sm"
+                    variant="outline" size="sm"
                     className="w-full mb-4 text-gray-600"
                     onClick={() => setExpandedMap(isMapOpen ? null : delivery.id)}
                   >
@@ -266,7 +253,6 @@ export function DeliveriesPage() {
                     </div>
                   )}
 
-                  {/* Action Button */}
                   {nextAction && (
                     <Button
                       className="w-full bg-green-600 hover:bg-green-700"
@@ -300,7 +286,7 @@ export function DeliveriesPage() {
       </div>
 
       {/* Volunteer Tips */}
-      {userDeliveries.length > 0 && (
+      {deliveries.length > 0 && (
         <Card className="bg-gradient-to-r from-purple-50 to-blue-50">
           <CardContent className="pt-6">
             <h3 className="font-semibold text-gray-900 mb-3">Volunteer Tips</h3>

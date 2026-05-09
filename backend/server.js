@@ -11,6 +11,8 @@ const authRoutes = require('./routes/auth');
 const donationRoutes = require('./routes/donations');
 const requestRoutes = require('./routes/requests');
 const dashboardRoutes = require('./routes/dashboard');
+const deliveryRoutes = require('./routes/deliveries');
+const userRoutes = require('./routes/users');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -49,6 +51,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/donations', donationRoutes);
 app.use('/api/requests', requestRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/deliveries', deliveryRoutes);
+app.use('/api/users', userRoutes);
 
 // ── 404 handler ──────────────────────────────────────────────────────────────
 app.use((req, res) => {

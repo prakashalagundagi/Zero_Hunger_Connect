@@ -4,19 +4,23 @@ const connectDB = async () => {
   const uri = process.env.MONGODB_URI;
 
   if (!uri) {
-    console.error('❌ MONGODB_URI environment variable is not set.');
-    process.exit(1);
+    console.log('⚠️  MONGODB_URI environment variable is not set. Running without database.');
+    console.log('📝 Note: Some features may not work without a database connection.');
+    return;
   }
 
   try {
     const conn = await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 10000,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 10000,
+      bufferCommands: false,
     });
     console.log(`✅ MongoDB connected: ${conn.connection.host}`);
   } catch (error) {
-    console.error(`❌ MongoDB connection error: ${error.message}`);
-    console.error('Tip: Make sure your Atlas cluster allows connections from 0.0.0.0/0 (all IPs).');
-    process.exit(1);
+    console.log(`⚠️  MongoDB connection failed: ${error.message}`);
+    console.log('📝 Running without database connection. Some features may not work.');
+    console.log('💡 To fix: Check your MONGODB_URI and ensure your IP is whitelisted in Atlas.');
   }
 };
 

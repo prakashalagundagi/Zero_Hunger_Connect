@@ -77,8 +77,28 @@ export function BrowsePage() {
     }
   };
 
-  const handleVolunteer = (donation: FoodDonation) => {
-    toast.success(`You've volunteered to deliver "${donation.title}"`);
+  const handleVolunteer = async (donation: FoodDonation) => {
+    try {
+      setIsSubmittingRequest(true);
+      
+      // Use the dedicated volunteer-claim endpoint (not the donor-only status endpoint)
+      await donationsAPI.volunteerClaim(donation.id);
+      
+      toast.success(`You've volunteered to deliver "${donation.title}"`);
+      
+      // Refresh donations list to show updated status
+      setDonations(prev => 
+        prev.map(d => 
+          d.id === donation.id 
+            ? { ...d, status: 'claimed' as const, claimedBy: user?.id, volunteerId: user?.id }
+            : d
+        )
+      );
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to volunteer for delivery');
+    } finally {
+      setIsSubmittingRequest(false);
+    }
   };
 
   return (

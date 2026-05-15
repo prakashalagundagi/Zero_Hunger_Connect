@@ -41,30 +41,142 @@ export function MapPage() {
   const mapRef = useRef<L.Map | null>(null);
   const mapDivRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<L.Marker[]>([]);
+  const userLocationMarkerRef = useRef<L.Marker | null>(null);
+  const watchIdRef = useRef<number | null>(null);
 
   const [donations, setDonations] = useState<FoodDonation[]>([]);
   const [selectedDonation, setSelectedDonation] = useState<FoodDonation | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  const center: [number, number] = [
+  const [userLocation, setUserLocation] = useState<[number, number]>([
     user?.location?.lat || 12.9716,
     user?.location?.lng || 77.5946,
-  ];
+  ]);
+  const [isLocationTracking, setIsLocationTracking] = useState(false);
+  const [isLiveTracking, setIsLiveTracking] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   // Fetch donations from real backend
   useEffect(() => {
-    donationsAPI.getAll({ status: 'available' })
+    donationsAPI.getAll() // Get all donations regardless of status
       .then((res) => setDonations(res.donations || []))
       .catch(() => setDonations([]))
       .finally(() => setIsLoading(false));
   }, []);
+
+  // Refresh donations when page becomes visible (handles volunteer status updates)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        donationsAPI.getAll() // Get all donations regardless of status
+          .then((res) => setDonations(res.donations || []))
+          .catch(() => setDonations([]));
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
+  // Get user's current location
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setIsLocationTracking(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        const newLocation: [number, number] = [latitude, longitude];
+        setUserLocation(newLocation);
+        setIsLocationTracking(false);
+        
+        // Update map center if map exists
+        if (mapRef.current) {
+          mapRef.current.setView(newLocation, 15);
+        }
+      },
+      (error) => {
+        setIsLocationTracking(false);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError('Location access denied. Please enable location services.');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setLocationError('Location information is unavailable.');
+            break;
+          case error.TIMEOUT:
+            setLocationError('Location request timed out.');
+            break;
+          default:
+            setLocationError('An unknown error occurred while getting location.');
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  };
+
+  // Watch user's location for live tracking
+  const startLiveTracking = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser');
+      return;
+    }
+
+    if (watchIdRef.current !== null) {
+      return; // Already tracking
+    }
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        const newLocation: [number, number] = [latitude, longitude];
+        setUserLocation(newLocation);
+        
+        // Update map center if map exists
+        if (mapRef.current) {
+          mapRef.current.setView(newLocation, 15);
+        }
+        
+        // Update user location marker
+        if (userLocationMarkerRef.current) {
+          userLocationMarkerRef.current.setLatLng(newLocation);
+        }
+      },
+      (error) => {
+        console.error('Live tracking error:', error);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+        maximumAge: 0,
+      }
+    );
+    setIsLiveTracking(true);
+  };
+
+  // Stop live tracking
+  const stopLiveTracking = () => {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    setIsLiveTracking(false);
+  };
 
   // Initialize map once
   useEffect(() => {
     if (!mapDivRef.current || mapRef.current) return;
 
     const map = L.map(mapDivRef.current, {
-      center,
+      center: userLocation,
       zoom: 13,
       zoomControl: true,
     });
@@ -76,14 +188,18 @@ export function MapPage() {
 
     // User location marker
     if (user) {
-      L.marker(center, { icon: blueIcon })
+      userLocationMarkerRef.current = L.marker(userLocation, { icon: blueIcon })
         .addTo(map)
         .bindPopup(`<strong>📍 Your Location</strong><br/>${user.name}`);
     }
 
     mapRef.current = map;
 
+    // Start live tracking automatically
+    startLiveTracking();
+
     return () => {
+      stopLiveTracking();
       map.remove();
       mapRef.current = null;
     };
@@ -132,14 +248,79 @@ export function MapPage() {
 
   const donationsWithDistance = donations.map((d) => ({
     ...d,
-    distance: calculateDistance(center[0], center[1], d.location.lat, d.location.lng),
+    distance: calculateDistance(userLocation[0], userLocation[1], d.location.lat, d.location.lng),
   }));
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Food Donations Map</h1>
-        <p className="text-gray-600">Live map of available food donations near you — Bengaluru, Karnataka</p>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Food Donations Map</h1>
+            <p className="text-gray-600">Live map of available food donations near you — Bengaluru, Karnataka</p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={getCurrentLocation}
+              disabled={isLocationTracking}
+              className="flex items-center gap-2"
+            >
+              {isLocationTracking ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Navigation className="w-4 h-4" />
+              )}
+              Get Location
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={isLiveTracking ? stopLiveTracking : startLiveTracking}
+              className={`flex items-center gap-2 ${
+                isLiveTracking ? 'bg-red-50 text-red-600 border-red-200' : ''
+              }`}
+            >
+              <MapPin className="w-4 h-4" />
+              {isLiveTracking ? 'Stop Tracking' : 'Live Tracking'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (mapRef.current && userLocation) {
+                  // Force map to update by using panTo and then setView
+                  const map = mapRef.current;
+                  const currentZoom = map.getZoom();
+                  
+                  // Use invalidateSize to force map recalculation
+                  map.invalidateSize();
+                  
+                  // Pan to location with animation
+                  map.flyTo(userLocation, currentZoom || 15, {
+                    duration: 1.5
+                  });
+                }
+              }}
+              className="flex items-center gap-2"
+            >
+              <Navigation className="w-4 h-4" />
+              My Location
+            </Button>
+          </div>
+        </div>
+        {locationError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+            {locationError}
+          </div>
+        )}
+        {isLiveTracking && (
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            Live location tracking is active
+          </div>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -262,7 +443,7 @@ export function MapPage() {
                   <span className="text-sm font-medium">Distance</span>
                 </div>
                 <p className="text-lg font-bold text-gray-900">
-                  {formatDistance(calculateDistance(center[0], center[1], selectedDonation.location.lat, selectedDonation.location.lng))}
+                  {formatDistance(calculateDistance(userLocation[0], userLocation[1], selectedDonation.location.lat, selectedDonation.location.lng))}
                 </p>
               </div>
               <div className="bg-white rounded-lg p-3">
@@ -287,12 +468,18 @@ export function MapPage() {
             <div className="flex gap-3">
               <Button
                 className="flex-1 bg-green-600 hover:bg-green-700"
-                onClick={() =>
-                  window.open(
-                    `https://www.openstreetmap.org/directions?from=&to=${selectedDonation.location.lat}%2C${selectedDonation.location.lng}`,
-                    '_blank'
-                  )
-                }
+                onClick={() => {
+                  const fromCoords = `${userLocation[0]},${userLocation[1]}`;
+                  const toCoords = `${selectedDonation.location.lat},${selectedDonation.location.lng}`;
+                  const toAddress = encodeURIComponent(selectedDonation.location.address);
+                  
+                  // Try Google Maps first, fallback to OpenStreetMap
+                  const googleMapsUrl = `https://www.google.com/maps/dir/${fromCoords}/${toCoords}/`;
+                  const osmUrl = `https://www.openstreetmap.org/directions?from=${fromCoords}&to=${toCoords}`;
+                  
+                  // Open Google Maps (more reliable)
+                  window.open(googleMapsUrl, '_blank');
+                }}
               >
                 <Navigation className="w-4 h-4 mr-2" />
                 Get Directions

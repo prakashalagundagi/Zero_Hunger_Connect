@@ -11,11 +11,14 @@ import { getCurrentUser } from '../utils/auth';
 import { FoodType } from '../types';
 import { donationsAPI } from '../services/api';
 import { AddressAutocomplete } from '../components/AddressAutocomplete';
+import { Navigation, Loader2 } from 'lucide-react';
 
 export function DonatePage() {
   const navigate = useNavigate();
   const user = getCurrentUser();
   const [isLoading, setIsLoading] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -39,6 +42,85 @@ export function DonatePage() {
   const handleAddressChange = (address: string) => {
     setFormData((prev) => ({ ...prev, address, lat: 0, lng: 0 }));
     setAddressVerified(false);
+  };
+
+  const handleGetLiveLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setIsGettingLocation(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        
+        // Reverse geocoding to get address from coordinates
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1&accept-language=en`
+          );
+          const data = await response.json();
+          
+          if (data && data.display_name) {
+            const address = data.display_name;
+            setFormData((prev) => ({ 
+              ...prev, 
+              address, 
+              lat: latitude, 
+              lng: longitude 
+            }));
+            setAddressVerified(true);
+            toast.success('Live location captured successfully!');
+          } else {
+            // Fallback to coordinates if address not found
+            setFormData((prev) => ({ 
+              ...prev, 
+              address: `Latitude: ${latitude.toFixed(5)}, Longitude: ${longitude.toFixed(5)}`, 
+              lat: latitude, 
+              lng: longitude 
+            }));
+            setAddressVerified(true);
+            toast.success('Live location captured! (Coordinates only)');
+          }
+        } catch (error) {
+          // Fallback to coordinates if geocoding fails
+          setFormData((prev) => ({ 
+            ...prev, 
+            address: `Latitude: ${latitude.toFixed(5)}, Longitude: ${longitude.toFixed(5)}`, 
+            lat: latitude, 
+            lng: longitude 
+          }));
+          setAddressVerified(true);
+          toast.success('Live location captured! (Coordinates only)');
+        }
+        
+        setIsGettingLocation(false);
+      },
+      (error) => {
+        setIsGettingLocation(false);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            toast.error('Location access denied. Please enable location services.');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            toast.error('Location information is unavailable.');
+            break;
+          case error.TIMEOUT:
+            toast.error('Location request timed out.');
+            break;
+          default:
+            toast.error('An unknown error occurred while getting location.');
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -219,16 +301,41 @@ export function DonatePage() {
             {/* Pickup Address — Nominatim autocomplete */}
             <div className="space-y-2">
               <Label>Pickup Address * <span className="text-xs text-gray-500 font-normal">(must be selected from suggestions)</span></Label>
-              <AddressAutocomplete
-                value={formData.address}
-                onSelect={handleAddressSelect}
-                onChange={handleAddressChange}
-                placeholder="Search your address in Bengaluru, Karnataka..."
-                required
-              />
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <AddressAutocomplete
+                    value={formData.address}
+                    onSelect={handleAddressSelect}
+                    onChange={handleAddressChange}
+                    placeholder="Search your address in Bengaluru, Karnataka..."
+                    required
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGetLiveLocation}
+                  disabled={isGettingLocation}
+                  className="flex items-center gap-2 whitespace-nowrap"
+                  title="Get current location"
+                >
+                  {isGettingLocation ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Navigation className="w-4 h-4" />
+                  )}
+                  {isGettingLocation ? 'Getting...' : 'Live Location'}
+                </Button>
+              </div>
               {formData.lat !== 0 && (
                 <p className="text-xs text-gray-400">
                   📍 Coordinates: {formData.lat.toFixed(5)}, {formData.lng.toFixed(5)}
+                </p>
+              )}
+              {locationError && (
+                <p className="text-xs text-red-500">
+                  ⚠ {locationError}
                 </p>
               )}
             </div>

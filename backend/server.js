@@ -1,5 +1,9 @@
 // Zero Hunger Connect — Express.js backend server
 // Runs on port 8000 (frontend Vite dev server proxies /api/* to this port)
+
+// Must be set BEFORE dotenv and mongoose load — Node 24/OpenSSL 3 + Atlas TLS fix
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 require('dotenv').config();
 
 const express = require('express');

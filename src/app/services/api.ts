@@ -1,8 +1,19 @@
 // Centralized API client for Zero Hunger Connect
-// All requests go through /api which Vite proxies to the backend on port 8000
-// Automatically attaches the JWT Bearer token from localStorage
+// In dev: /api is proxied by Vite to localhost:8000
+// In production/mobile: use the full backend URL
+import { Capacitor } from '@capacitor/core';
 
-const API_BASE = '/api';
+// Detect if running on native mobile or web
+const isNative = Capacitor.isNativePlatform();
+
+// For mobile builds, replace this with your actual backend URL
+// Options:
+// 1. Use your PC's local IP (e.g., http://192.168.1.160:8000/api) — only works on same WiFi
+// 2. Deploy backend to a cloud service (Render, Railway, Heroku) and use that URL
+// 3. Use ngrok to expose localhost:8000 temporarily
+const MOBILE_API_BASE = 'http://192.168.1.160:8000/api'; // Your PC's WiFi IP
+
+const API_BASE = isNative ? MOBILE_API_BASE : '/api';
 const TOKEN_KEY = 'zhc_token';
 
 /** Retrieve the stored JWT token */
@@ -123,6 +134,11 @@ export const donationsAPI = {
     request<{ success: boolean; donation: any }>(`/donations/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status, ...extra }),
+    }),
+
+  volunteerClaim: (id: string) =>
+    request<{ success: boolean; donation: any }>(`/donations/${id}/volunteer`, {
+      method: 'PATCH',
     }),
 
   delete: (id: string) =>
